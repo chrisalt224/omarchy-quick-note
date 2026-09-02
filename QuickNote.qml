@@ -192,13 +192,13 @@ Item {
 
       MouseArea { anchors.fill: parent; onClicked: editor.forceActiveFocus() }
 
-      Column {
+      Item {
         anchors.fill: parent
         anchors.margins: Style.spacing.panelPadding
-        spacing: Style.spacing.md
 
         Text {
-          width: parent.width
+          id: titleText
+          anchors { top: parent.top; left: parent.left; right: parent.right }
           elide: Text.ElideRight
           text: root.noteTitle
           color: root.foreground
@@ -208,7 +208,9 @@ Item {
         }
 
         Item {
-          width: parent.width
+          id: headerRow
+          anchors { top: titleText.bottom; left: parent.left; right: parent.right }
+          anchors.topMargin: Style.spacing.md
           height: Style.space(28)
 
           Text {
@@ -216,7 +218,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width - buttons.width - Style.space(12)
             elide: Text.ElideMiddle
-            text: "→ " + root.destination
+            text: "\u2192 " + root.destination
             color: root.foreground
             opacity: 0.65
             font.family: Style.font.menuFamily
@@ -241,17 +243,50 @@ Item {
           }
         }
 
+        // Pinned to the bottom so the hint sits on the floor of the card rather
+        // than wherever the editor happens to end.
+        Text {
+          id: hintText
+          anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+          elide: Text.ElideMiddle
+          color: root.failed ? root.urgent : root.foreground
+          opacity: root.status ? 0.85 : 0.45
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.body
+          text: root.status
+                ? (root.failed ? root.status
+                               : (root.mode === "daily" ? "Appended \u2192 " : "Saved \u2192 ")
+                                 + root.status.split("/").slice(-2).join("/"))
+                : "Ctrl+Enter save \u00b7 Ctrl+Shift+Enter save & open \u00b7 Tab switch \u00b7 Esc discard"
+        }
+
         Flickable {
-          width: parent.width
-          height: parent.height - Style.space(136)
+          id: flick
+          anchors {
+            top: headerRow.bottom
+            bottom: hintText.top
+            left: parent.left
+            right: parent.right
+          }
+          anchors.topMargin: Style.spacing.md
+          anchors.bottomMargin: Style.spacing.md
           contentWidth: width
-          contentHeight: editor.paintedHeight
+          contentHeight: Math.max(editor.paintedHeight, editor.implicitHeight)
           clip: true
           interactive: true
+          boundsBehavior: Flickable.StopAtBounds
+
+          // Keep the caret on screen: a Flickable does not follow it on its own,
+          // so text past the bottom of the card would be typed into the void.
+          function ensureVisible(r) {
+            if (contentHeight <= height) { contentY = 0; return }
+            if (contentY >= r.y) contentY = r.y
+            else if (contentY + height <= r.y + r.height) contentY = r.y + r.height - height
+          }
 
           TextEdit {
             id: editor
-            width: parent.width
+            width: flick.width
             color: root.foreground
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.title
@@ -259,6 +294,12 @@ Item {
             selectByMouse: true
             selectionColor: root.accent
             focus: true
+
+            // Both signals matter: the caret moves on arrow keys without the text
+            // changing, and fast input can outrun layout, leaving cursorRectangle
+            // stale until the next frame -- hence the deferred second pass.
+            onCursorRectangleChanged: flick.ensureVisible(cursorRectangle)
+            onTextChanged: Qt.callLater(function() { flick.ensureVisible(editor.cursorRectangle) })
 
             Keys.priority: Keys.BeforeItem
             Keys.onPressed: function(event) {
@@ -275,20 +316,6 @@ Item {
               }
             }
           }
-        }
-
-        Text {
-          width: parent.width
-          elide: Text.ElideMiddle
-          color: root.failed ? root.urgent : root.foreground
-          opacity: root.status ? 0.85 : 0.45
-          font.family: Style.font.menuFamily
-          font.pixelSize: Style.font.body
-          text: root.status
-                ? (root.failed ? root.status
-                               : (root.mode === "daily" ? "Appended → " : "Saved → ")
-                                 + root.status.split("/").slice(-2).join("/"))
-                : "Ctrl+Enter save · Ctrl+Shift+Enter save & open · Tab switch · Esc discard"
         }
       }
     }
