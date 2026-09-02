@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.chrisalt224.quick-note",
+  "name": "Quick Note",
+  "version": "1.0.0",
+  "author": "Altomare",
+  "license": "MIT",
+  "description": "Capture a note straight into your open Obsidian vault without leaving the keyboard",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": { "overlay": "QuickNote.qml" }
+}
