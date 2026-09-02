@@ -32,10 +32,16 @@ The two buttons on the card do the same as `Tab` and `Ctrl+Shift+Enter`.
 
 ## Where notes go
 
-The vault Obsidian currently has open wins — the plugin reads
-`~/.config/obsidian/obsidian.json`, preferring the vault marked `"open": true`
-and otherwise the most recently used one. Nothing is hardcoded, and it follows
-you when you switch vaults.
+Nothing is hardcoded. The plugin reads `~/.config/obsidian/obsidian.json` at
+capture time and picks the vault like this:
+
+1. Among vaults Obsidian has open (`"open": true`), the one with the newest
+   `ts` — so with two windows open you get the one you used last, not whichever
+   sorts first.
+2. If none are open, because Obsidian is closed, the most recently used vault
+   overall.
+
+So it follows you when you switch vaults, and still works with Obsidian shut.
 
 - **New note** — a new file in `Quick Notes/`, named `YYYYMMDDHHMM.md`.
   Same-minute collisions get `-2`, `-3`.

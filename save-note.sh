@@ -19,9 +19,14 @@ FOLDER="${QUICK_NOTE_FOLDER:-Quick Notes}"
 
 # Obsidian marks the vault it has open with "open": true. Fall back to the most
 # recently touched one, which is what you get when Obsidian is closed.
+# Obsidian marks every vault it has a window open for with "open": true, so
+# there can be several. Rank by ts within those to get the one most recently
+# used rather than whichever happens to come first in the JSON. With no vault
+# open at all -- Obsidian closed -- fall back to the most recent overall.
 vault=$(jq -r '
   [.vaults | to_entries[] | .value | select(.path != null)]
-  | (map(select(.open == true)) | first) // (sort_by(.ts // 0) | last)
+  | ( (map(select(.open == true)) | sort_by(.ts // 0) | last)
+      // (sort_by(.ts // 0) | last) )
   | .path // empty' "$REGISTRY")
 [[ -n $vault && -d $vault ]] || { echo "no usable vault (got: ${vault:-none})" >&2; exit 1; }
 vname=$(basename "$vault")
