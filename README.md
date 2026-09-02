@@ -19,6 +19,17 @@ o.bind("SUPER + Q", "Quick note", "omarchy-shell shell summon io.github.chrisalt
 
 Requires `jq` and `xdg-utils`, both of which Omarchy already ships.
 
+## Remove
+
+```bash
+omarchy plugin remove io.github.chrisalt224.quick-note
+```
+
+Then delete the keybinding you added to `~/.config/hypr/bindings.lua`.
+
+Removal takes nothing else with it: the plugin only ever writes notes into your
+vault, and those are ordinary Markdown files that stay where they are.
+
 ## Keys
 
 | Key | Action |
