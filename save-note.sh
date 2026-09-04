@@ -31,12 +31,32 @@ vault=$(jq -r '
 [[ -n $vault && -d $vault ]] || { echo "no usable vault (got: ${vault:-none})" >&2; exit 1; }
 vname=$(basename "$vault")
 
+# The folder and date-format values come from the vault's own config and from
+# the environment. Neither is trusted to stay inside the vault: a ".." in either
+# would otherwise let a write land anywhere the user can write. Resolve the
+# candidate path with symlinks followed and require it to sit under the vault.
+require_inside_vault() {
+  local candidate="$1" rp rbase
+  rp=$(realpath -m -- "$candidate" 2>/dev/null) || return 1
+  rbase=$(realpath -m -- "$vault" 2>/dev/null) || return 1
+  [[ $rp == "$rbase"/* ]]
+}
+
+reject_traversal() {
+  local label="$1" value="$2"
+  case "$value" in
+    /*|*/../*|*/..|../*|..) echo "$label must be a relative path inside the vault: $value" >&2; exit 1;;
+  esac
+}
+
 # Daily-note settings live in the vault. Obsidian uses moment.js tokens; map the
 # common ones onto strftime so the filename matches what Obsidian would create.
 dn="$vault/.obsidian/daily-notes.json"
 daily_folder=$(jq -r '.folder // ""' "$dn" 2>/dev/null)
 daily_format=$(jq -r '.format // ""' "$dn" 2>/dev/null)
 [[ -n $daily_folder && $daily_folder != "null" ]] || daily_folder=""
+reject_traversal "daily-notes folder" "$daily_folder"
+reject_traversal "QUICK_NOTE_FOLDER" "$FOLDER"
 [[ -n $daily_format && $daily_format != "null" ]] || daily_format="YYYY-MM-DD"
 
 moment_to_strftime() {
@@ -78,7 +98,12 @@ if [[ $mode == "daily" ]]; then
   target="$dir/$daily_name.md"
   # A format like YYYY/MM/DD nests directories, so create the target's parent
   # rather than just the configured folder.
+  require_inside_vault "$target" || { echo "refusing to write outside the vault: $target" >&2; exit 1; }
   mkdir -p "$(dirname "$target")" || { echo "cannot create $(dirname "$target")" >&2; exit 1; }
+  # Appending through a symlink would redirect the write to whatever it points
+  # at, so only ever append to a regular file.
+  if [[ -L $target ]]; then echo "refusing to append through a symlink: $target" >&2; exit 1; fi
+  if [[ -e $target && ! -f $target ]]; then echo "not a regular file: $target" >&2; exit 1; fi
   # An existing daily note is only ever appended to, so nothing already written
   # for today can be lost.
   printf '\n## %s\n%s\n' "$(date +%H:%M)" "$body" >> "$target" || { echo "append failed: $target" >&2; exit 1; }
@@ -94,9 +119,19 @@ base=$(date +%Y%m%d%H%M)
 dir="$vault"; [[ -n $FOLDER ]] && dir="$vault/$FOLDER"
 mkdir -p "$dir" || { echo "cannot create $dir" >&2; exit 1; }
 
-target="$dir/$base.md"
-n=2
-while [[ -e $target ]]; do target="$dir/$base-$n.md"; ((n++)); done
+require_inside_vault "$dir/x" || { echo "refusing to write outside the vault: $dir" >&2; exit 1; }
 
-printf '%s\n' "$body" > "$target" || { echo "write failed: $target" >&2; exit 1; }
+# noclobber makes ">" an O_CREAT|O_EXCL open: it fails if anything is already
+# at the path, symlink included, rather than testing first and writing after.
+# That closes both the check-then-open race and the symlink redirect, and the
+# loop simply advances to the next free name when the create loses.
+set -C
+n=1
+target="$dir/$base.md"
+until printf '%s\n' "$body" 2>/dev/null > "$target"; do
+  if (( n > 50 )); then echo "could not find a free filename in $dir" >&2; exit 1; fi
+  n=$((n + 1))
+  target="$dir/$base-$n.md"
+done
+set +C
 echo "$target"

@@ -153,6 +153,9 @@ Item {
     border.color: btn.active ? root.accent : root.borderColor
     border.width: 1
     Text {
+      // Paths and subprocess output are data, never markup: AutoText would
+      // interpret tags and resource references coming from those sources.
+      textFormat: Text.PlainText
       id: btnText
       anchors.centerIn: parent
       text: btn.label
@@ -197,6 +200,9 @@ Item {
         anchors.margins: Style.spacing.panelPadding
 
         Text {
+          // Paths and subprocess output are data, never markup: AutoText would
+          // interpret tags and resource references coming from those sources.
+          textFormat: Text.PlainText
           id: titleText
           anchors { top: parent.top; left: parent.left; right: parent.right }
           elide: Text.ElideRight
@@ -214,6 +220,9 @@ Item {
           height: Style.space(28)
 
           Text {
+            // Paths and subprocess output are data, never markup: AutoText would
+            // interpret tags and resource references coming from those sources.
+            textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width - buttons.width - Style.space(12)
@@ -246,6 +255,9 @@ Item {
         // Pinned to the bottom so the hint sits on the floor of the card rather
         // than wherever the editor happens to end.
         Text {
+          // Paths and subprocess output are data, never markup: AutoText would
+          // interpret tags and resource references coming from those sources.
+          textFormat: Text.PlainText
           id: hintText
           anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
           elide: Text.ElideMiddle
