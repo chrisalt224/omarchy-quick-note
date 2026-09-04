@@ -58,6 +58,9 @@ daily_format=$(jq -r '.format // ""' "$dn" 2>/dev/null)
 reject_traversal "daily-notes folder" "$daily_folder"
 reject_traversal "QUICK_NOTE_FOLDER" "$FOLDER"
 [[ -n $daily_format && $daily_format != "null" ]] || daily_format="YYYY-MM-DD"
+# A format may legitimately contain "/" (YYYY/MM/DD nests directories), which
+# makes it path input like the folder, so it gets the same treatment.
+reject_traversal "daily-notes format" "$daily_format"
 
 moment_to_strftime() {
   # Longest tokens first so MM is not eaten by M, etc.
@@ -80,7 +83,10 @@ fi
 # correctly, including the spaces that vault and folder names usually contain.
 if [[ ${1:-} == "--open" ]]; then
   [[ -n ${2:-} ]] || { echo "--open needs a path" >&2; exit 1; }
-  rel="${2#$vault/}"
+  require_inside_vault "$2" || { echo "refusing to open a path outside the vault: $2" >&2; exit 1; }
+  # Plain string strip: "${2#$vault/}" treats $vault as a pattern, so a vault
+  # path containing glob characters would strip the wrong prefix or none.
+  rel="${2:${#vault}}"; rel="${rel#/}"
   uri=$(jq -rn --arg v "$vname" --arg f "$rel" '"obsidian://open?vault=\($v|@uri)&file=\($f|@uri)"')
   echo "$uri"
   xdg-open "$uri" >/dev/null 2>&1 &
@@ -117,9 +123,8 @@ fi
 base=$(date +%Y%m%d%H%M)
 
 dir="$vault"; [[ -n $FOLDER ]] && dir="$vault/$FOLDER"
-mkdir -p "$dir" || { echo "cannot create $dir" >&2; exit 1; }
-
 require_inside_vault "$dir/x" || { echo "refusing to write outside the vault: $dir" >&2; exit 1; }
+mkdir -p "$dir" || { echo "cannot create $dir" >&2; exit 1; }
 
 # noclobber makes ">" an O_CREAT|O_EXCL open: it fails if anything is already
 # at the path, symlink included, rather than testing first and writing after.
