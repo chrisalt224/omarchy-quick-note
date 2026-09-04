@@ -23,13 +23,17 @@ Item {
   property string status: ""
   property bool failed: false
 
-  readonly property string script: Qt.resolvedUrl("save-note.sh").toString().replace("file://", "")
+  // Qt.resolvedUrl percent-encodes, so a plugin path containing a space or #
+  // would come back as %20/%23 and fail to execute. Decode it back.
+  readonly property string script: decodeURIComponent(
+    Qt.resolvedUrl("save-note.sh").toString().replace(/^file:\/\//, ""))
 
   // Obsidian's file explorer lists notes by filename, so this previews the
   // name the file will actually get rather than deriving one from the text.
   readonly property string noteTitle: {
     if (root.mode === "daily")
-      return root.info ? root.info.dailyNote.split("/").pop().replace(/\.md$/, "") : "…"
+      return (root.info && root.info.dailyNote)
+        ? String(root.info.dailyNote).split("/").pop().replace(/\.md$/, "") : "…"
     return Qt.formatDateTime(new Date(), "yyyyMMddhhmm")
   }
 
@@ -82,6 +86,19 @@ Item {
     if (!editor.text || !editor.text.replace(/\s/g, "")) { root.dismiss(); return }
     // Coerce: the key handler passes a modifier bitmask (an integer), not a bool.
     root.openAfterSave = !!thenOpen
+    // Guard against a second Ctrl+Enter landing while the first is still in
+    // flight, which would write the note twice.
+    if (saveProc.running) return
+    // The body is passed as an argument. Linux caps a single argument at
+    // MAX_ARG_STRLEN (32 pages, 131072 bytes) and exec fails above it, so
+    // refuse clearly rather than losing the note. Measured in bytes, not
+    // characters: one non-ASCII character can be up to four of them.
+    var bytes = encodeURIComponent(editor.text).replace(/%[0-9A-F]{2}/gi, "x").length
+    if (bytes > 120000) {
+      root.failed = true
+      root.status = "note too large to save (" + Math.round(bytes / 1024) + " KB, limit 117 KB)"
+      return
+    }
     saveProc.command = root.mode === "daily"
       ? [root.script, "--daily", editor.text]
       : [root.script, editor.text]
@@ -101,6 +118,15 @@ Item {
 
   Process {
     id: saveProc
+    // A failure that printed nothing to stderr would otherwise leave the
+    // overlay open with no explanation.
+    onExited: function(code, status) {
+      if (code !== 0 && !root.failed) {
+        root.failed = true
+        if (!root.status) root.status = "save failed (exit " + code + ")"
+      }
+    }
+
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
